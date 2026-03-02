@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline';">
+<title>CursorForge</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --red:#e8001a; --red-dim:#9b0012; --red-glow:#ff002b;
+  --black:#050505; --dark:#0f0f0f; --card:#141414;
+  --border:#2a0008; --text:#e8e0e0; --muted:#6b5555;
+}
+html,body { height:100%; cursor:none; user-select:none; overflow:hidden; }
+body { background:var(--black); color:var(--text); font-family:'Noto Sans KR',sans-serif; display:flex; flex-direction:column; }
+body::before {
+  content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  background-size:180px; opacity:.3;
+}
+
+/* ─ Cursor ─ */
+#cur-ring {
+  position:fixed; pointer-events:none; z-index:99999;
+  width:32px; height:32px; border:2px solid var(--red); border-radius:50%;
+  transform:translate(-50%,-50%);
+  transition:width .15s,height .15s,border-color .15s,opacity .15s;
+}
+#cur-dot {
+  position:fixed; pointer-events:none; z-index:99999;
+  width:6px; height:6px; background:var(--red); border-radius:50%;
+  transform:translate(-50%,-50%);
+}
+body.hovering #cur-ring { width:48px; height:48px; border-color:var(--red-glow); box-shadow:0 0 14px var(--red-glow); }
+body.clicking #cur-ring { width:18px; height:18px; }
+#trail-canvas { position:fixed; inset:0; pointer-events:none; z-index:99998; }
+
+/* ─ Titlebar ─ */
+.titlebar {
+  height:44px; background:var(--dark); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; padding:0 16px;
+  -webkit-app-region:drag; flex-shrink:0; position:relative; z-index:10;
+}
+.tb-logo { font-family:'Black Han Sans',sans-serif; font-size:15px; letter-spacing:4px; }
+.tb-logo span { color:var(--red); }
+.tb-ver { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--muted); margin-left:10px; }
+.tb-controls { margin-left:auto; display:flex; gap:6px; -webkit-app-region:no-drag; }
+.tb-btn {
+  width:28px; height:28px; border:1px solid var(--border); background:transparent;
+  color:var(--muted); font-size:12px; display:grid; place-items:center; cursor:none;
+  transition:all .15s; border-radius:1px;
+}
+.tb-btn:hover { background:var(--card); color:var(--text); border-color:var(--red-dim); }
+.tb-btn.x:hover { background:var(--red); color:#000; border-color:var(--red); }
+
+/* ─ Layout ─ */
+.app-body { display:flex; flex:1; overflow:hidden; position:relative; z-index:1; }
+
+/* ─ Sidebar ─ */
+.sidebar {
+  width:290px; flex-shrink:0;
+  background:var(--dark); border-right:1px solid var(--border);
+  display:flex; flex-direction:column;
+  overflow-y:auto; overflow-x:hidden;
+}
+.sidebar::-webkit-scrollbar { width:3px; }
+.sidebar::-webkit-scrollbar-thumb { background:var(--border); }
+
+.sec { padding:18px 18px 0; }
+.sec-label {
+  font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--muted);
+  letter-spacing:3px; text-transform:uppercase;
+  border-left:2px solid var(--red); padding-left:8px; margin-bottom:14px;
+}
+
+/* ─ Photo card ─ */
+.photo-card {
+  border:1px dashed var(--border); padding:12px;
+  cursor:none; transition:all .2s; display:flex; flex-direction:column;
+  align-items:center; gap:8px; position:relative; margin-bottom:16px;
+}
+.photo-card:hover { border-color:var(--red-dim); background:#1a0005; }
+.photo-card.active { border:1px solid var(--red); background:#1c0007; }
+.photo-card.active::after { content:'✓'; position:absolute; top:6px; right:8px; color:var(--red); font-size:10px; font-family:'Share Tech Mono',monospace; }
+.photo-thumb {
+  width:52px; height:52px; border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center; overflow:hidden; background:var(--black);
+}
+.photo-thumb img { width:100%; height:100%; object-fit:contain; }
+.photo-thumb .plus { font-size:22px; color:var(--muted); }
+.photo-name { font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--muted); text-align:center; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.photo-card.active .photo-name { color:var(--red); }
+.pick-btn {
+  width:100%; padding:7px; background:transparent; border:1px solid var(--border);
+  color:var(--muted); font-family:'Share Tech Mono',monospace; font-size:10px;
+  letter-spacing:2px; cursor:none; transition:all .2s; text-transform:uppercase;
+}
+.pick-btn:hover { border-color:var(--red); color:var(--red); background:#1c0007; }
+
+/* ─ Skin grid ─ */
+.skin-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:4px; }
+.skin-card {
+  border:1px solid var(--border); padding:10px 6px; cursor:none;
+  transition:all .2s; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative;
+}
+.skin-card:hover { border-color:var(--red-dim); background:#1a0005; }
+.skin-card.active { border-color:var(--red); background:#1c0007; }
+.skin-card.active::after { content:'✓'; position:absolute; top:4px; right:6px; color:var(--red); font-size:9px; font-family:'Share Tech Mono',monospace; }
+.skin-preview { width:34px; height:34px; display:flex; align-items:center; justify-content:center; }
+.skin-label { font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--muted); text-transform:uppercase; }
+.skin-card.active .skin-label { color:var(--red); }
+
+/* ─ Divider ─ */
+.div { height:1px; background:var(--border); margin:14px 18px; }
+
+/* ─ Colors ─ */
+.color-row { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+.color-item { display:flex; flex-direction:column; gap:5px; }
+.color-item label { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; }
+.cc { display:flex; align-items:center; gap:8px; }
+input[type=color] { -webkit-appearance:none; width:30px; height:30px; border:1px solid var(--border); background:none; cursor:none; padding:0; }
+input[type=color]::-webkit-color-swatch-wrapper { padding:3px; }
+input[type=color]::-webkit-color-swatch { border:none; }
+.hex { font-family:'Share Tech Mono',monospace; font-size:12px; color:var(--text); background:var(--black); border:1px solid var(--border); padding:4px 8px; width:80px; outline:none; }
+.hex:focus { border-color:var(--red); }
+
+/* ─ Sliders ─ */
+.sl-row { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+.sl-head { display:flex; justify-content:space-between; }
+.sl-head span { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; }
+.sl-val { color:var(--red) !important; }
+input[type=range] { -webkit-appearance:none; width:100%; height:3px; background:var(--border); outline:none; cursor:none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; background:var(--red); cursor:none; }
+input[type=range]::-webkit-slider-runnable-track { height:3px; background:linear-gradient(90deg,var(--red) var(--pct,0%),var(--border) var(--pct,0%)); }
+
+/* ─ Buttons ─ */
+.btn-row { padding:16px 18px; display:flex; flex-direction:column; gap:10px; margin-top:auto; }
+.apply-btn {
+  width:100%; padding:14px; background:var(--red); color:#000; border:none;
+  font-family:'Black Han Sans',sans-serif; font-size:15px; letter-spacing:4px;
+  cursor:none; transition:all .2s;
+}
+.apply-btn:hover { background:var(--red-glow); }
+.apply-btn:active { transform:scaleY(.97); }
+.restore-btn {
+  width:100%; padding:10px; background:transparent; border:1px solid var(--border);
+  color:var(--muted); font-family:'Share Tech Mono',monospace; font-size:11px;
+  letter-spacing:2px; cursor:none; transition:all .2s; text-transform:uppercase;
+}
+.restore-btn:hover { border-color:var(--muted); color:var(--text); }
+
+/* ─ Preview ─ */
+.preview-area { flex:1; display:flex; flex-direction:column; padding:20px; gap:16px; overflow-y:auto; }
+.preview-area::-webkit-scrollbar { width:3px; }
+.preview-area::-webkit-scrollbar-thumb { background:var(--border); }
+
+.preview-zone {
+  flex:1; border:1px solid var(--border); background:var(--card);
+  position:relative; min-height:200px;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+}
+.pz-label { position:absolute; top:-1px; left:16px; background:var(--red); color:#000; font-family:'Share Tech Mono',monospace; font-size:10px; font-weight:700; padding:3px 10px; letter-spacing:2px; }
+.pz-grid { position:absolute; inset:0; opacity:.04; background-image:linear-gradient(var(--red) 1px,transparent 1px),linear-gradient(90deg,var(--red) 1px,transparent 1px); background-size:40px 40px; }
+.pz-content { position:relative; z-index:1; display:flex; gap:14px; flex-wrap:wrap; justify-content:center; padding:40px; }
+.p-btn { padding:10px 20px; border:1px solid var(--border); background:transparent; color:var(--text); font-family:'Share Tech Mono',monospace; font-size:11px; letter-spacing:2px; cursor:none; transition:all .2s; text-transform:uppercase; }
+.p-btn:hover { border-color:var(--red); color:var(--red); background:#1c0007; }
+.p-btn.red { border-color:var(--red); color:var(--red); }
+.p-text { color:var(--muted); font-family:'Share Tech Mono',monospace; font-size:11px; line-height:2; text-align:center; }
+
+/* ─ Ad banner (하단) ─ */
+.ad-wrap {
+  border:1px solid var(--border); background:var(--card);
+  flex-shrink:0; position:relative; height:90px; overflow:hidden;
+}
+.ad-wrap-tag {
+  position:absolute; top:0; left:0; z-index:10;
+  background:#1a0005; color:#3a1515;
+  font-family:'Share Tech Mono',monospace;
+  font-size:9px; letter-spacing:2px; padding:2px 8px;
+  pointer-events:none;
+}
+.ad-wrap webview { width:100%; height:100%; border:none; }
+.ad-fallback {
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center; gap:16px;
+  pointer-events:none;
+}
+.ad-fallback-text { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--muted); letter-spacing:1px; }
+.ad-fallback-sub  { font-family:'Share Tech Mono',monospace; font-size:10px; color:#2a1515; margin-top:4px; }
+
+/* ─ Statusbar ─ */
+.statusbar {
+  height:30px; background:var(--dark); border-top:1px solid var(--border);
+  display:flex; align-items:center; padding:0 18px; gap:20px; flex-shrink:0; position:relative; z-index:1;
+}
+.s-item { display:flex; align-items:center; gap:6px; font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--muted); }
+.s-dot { width:5px; height:5px; background:var(--red); border-radius:50%; animation:blink 1.5s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+#pos-disp,#skin-disp { color:var(--red); }
+
+/* ─ Toast ─ */
+.toast {
+  position:fixed; bottom:44px; right:20px; z-index:99999;
+  background:var(--red); color:#000;
+  font-family:'Share Tech Mono',monospace; font-size:11px; letter-spacing:2px;
+  padding:10px 20px;
+  transform:translateX(130%); transition:transform .3s cubic-bezier(.16,1,.3,1);
+  pointer-events:none; max-width:300px;
+}
+.toast.show { transform:translateX(0); }
+.toast.err { background:#333; color:var(--red); border:1px solid var(--red); }
+</style>
+</head>
+<body>
+
+<div id="cur-ring"></div>
+<div id="cur-dot"></div>
+<canvas id="trail-canvas"></canvas>
+<div class="toast" id="toast"></div>
+
+<!-- Titlebar -->
+<div class="titlebar">
+  <div class="tb-logo">CURSOR<span>FORGE</span></div>
+  <div class="tb-ver">v2.1.0</div>
+  <div class="tb-controls">
+    <button class="tb-btn" id="btnMin">─</button>
+    <button class="tb-btn" id="btnMax">□</button>
+    <button class="tb-btn x" id="btnClose">✕</button>
+  </div>
+</div>
+
+<div class="app-body">
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sec" style="padding-bottom:0; padding-top:18px;">
+      <div class="sec-label">사진 커서</div>
+      <div class="photo-card" id="photoCard">
+        <div class="photo-thumb" id="photoThumb"><span class="plus">+</span></div>
+        <div class="photo-name" id="photoName">이미지를 선택하세요</div>
+        <button class="pick-btn" id="pickBtn">📁 이미지 선택</button>
+      </div>
+    </div>
+
+    <div class="div"></div>
+
+    <div class="sec">
+      <div class="sec-label">프리셋 스킨</div>
+      <div class="skin-grid" id="skinGrid"></div>
+    </div>
+
+    <div class="div"></div>
+
+    <div class="sec">
+      <div class="sec-label">색상</div>
+      <div class="color-row">
+        <div class="color-item">
+          <label>메인 색상</label>
+          <div class="cc">
+            <input type="color" id="mainColor" value="#e8001a">
+            <input type="text" class="hex" id="mainHex" value="#e8001a" maxlength="7">
+          </div>
+        </div>
+        <div class="color-item">
+          <label>외곽선 색상</label>
+          <div class="cc">
+            <input type="color" id="outlineColor" value="#ffffff">
+            <input type="text" class="hex" id="outlineHex" value="#ffffff" maxlength="7">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="div"></div>
+
+    <div class="sec">
+      <div class="sec-label">설정</div>
+      <div class="sl-row">
+        <div class="sl-head"><span>커서 크기</span><span class="sl-val" id="sizeVal">100%</span></div>
+        <input type="range" id="sizeSlider" min="50" max="220" value="100">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>트레일 효과</span><span class="sl-val" id="trailVal">보통</span></div>
+        <input type="range" id="trailSlider" min="0" max="3" value="1" step="1">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>링 투명도</span><span class="sl-val" id="opacityVal">100%</span></div>
+        <input type="range" id="opacitySlider" min="10" max="100" value="100">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>이미지 커서 크기</span><span class="sl-val" id="imgSzVal">64px</span></div>
+        <input type="range" id="imgSzSlider" min="16" max="128" value="64">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <!-- 시스템 전체 커서 적용 (핵심 버튼) -->
+      <button class="apply-btn" id="applySystemBtn">🖱 Windows 커서 적용</button>
+      <!-- 기본 커서로 복원 -->
+      <button class="restore-btn" id="restoreBtn">↩ 기본 커서로 복원</button>
+    </div>
+
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-area">
+    <div class="preview-zone">
+      <div class="pz-label">PREVIEW ZONE</div>
+      <div class="pz-grid"></div>
+      <div class="pz-content">
+        <button class="p-btn red">호버 테스트</button>
+        <button class="p-btn">버튼 클릭</button>
+        <button class="p-btn">드래그 테스트</button>
+        <div class="p-text">
+          커서를 자유롭게 움직여보세요.<br>
+          사진 이미지를 선택해 나만의 커서를 만들 수 있습니다.<br><br>
+          설정 완료 후 <span style="color:var(--red)">Windows 커서 적용</span> 버튼을 누르면<br>
+          시스템 전체에 즉시 반영됩니다.
+        </div>
+      </div>
+    </div>
+
+    <!-- ★ Google AdSense 배너 광고 — main.js AD_CONFIG.bannerAdUrl 수정 -->
+    <div class="ad-wrap">
+      <div class="ad-wrap-tag">AD · GOOGLE ADSENSE</div>
+      <webview id="bannerAdView" src="about:blank" allowpopups></webview>
+      <div class="ad-fallback" id="bannerFallback">
+        <div>
+          <div class="ad-fallback-text">GOOGLE ADSENSE 배너 광고</div>
+          <div class="ad-fallback-sub">main.js → AD_CONFIG.bannerAdUrl 에 내 사이트 주소 입력</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="statusbar">
+  <div class="s-item"><div class="s-dot"></div> ACTIVE</div>
+  <div class="s-item">POS <span id="pos-disp">0, 0</span></div>
+  <div class="s-item">SKIN <span id="skin-disp">ARROW</span></div>
+  <div class="s-item" style="margin-left:auto;color:#2a1515;">CursorForge © 2025</div>
+</div>
+
+<script>
+// ─── SKINS ────────────────────────────────────────────────────────────
+const SKINS = [
+  { id:'arrow', label:'ARROW',
+    svg:(mc,oc,s)=>`<svg width="${28*s}" height="${28*s}" viewBox="0 0 32 32"><polygon points="4,4 4,26 10,20 14,30 17,29 13,19 22,19" fill="${mc}" stroke="${oc}" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
+    hot:(s)=>({x:4,y:4}) },
+  { id:'cross', label:'CROSS',
+    svg:(mc,oc,s)=>`<svg width="${28*s}" height="${28*s}" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="none" stroke="${mc}" stroke-width="2"/><circle cx="16" cy="16" r="2.5" fill="${mc}"/><line x1="16" y1="2" x2="16" y2="9" stroke="${mc}" stroke-width="2"/><line x1="16" y1="23" x2="16" y2="30" stroke="${mc}" stroke-width="2"/><line x1="2" y1="16" x2="9" y2="16" stroke="${mc}" stroke-width="2"/><line x1="23" y1="16" x2="30" y2="16" stroke="${mc}" stroke-width="2"/></svg>`,
+    hot:(s)=>({x:16*s,y:16*s}) },
+  { id:'diamond', label:'DIAM',
+    svg:(mc,oc,s)=>`<svg width="${28*s}" height="${28*s}" viewBox="0 0 32 32"><polygon points="16,2 30,16 16,30 2,16" fill="${mc}" stroke="${oc}" stroke-width="1.5"/><polygon points="16,8 24,16 16,24 8,16" fill="${oc}" opacity="0.3"/></svg>`,
+    hot:(s)=>({x:16*s,y:2}) },
+  { id:'target', label:'TARGET',
+    svg:(mc,oc,s)=>`<svg width="${28*s}" height="${28*s}" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="none" stroke="${mc}" stroke-width="1.5"/><circle cx="16" cy="16" r="7" fill="none" stroke="${mc}" stroke-width="1.5"/><circle cx="16" cy="16" r="2.5" fill="${mc}"/><line x1="2" y1="16" x2="9" y2="16" stroke="${oc}" stroke-width="1"/><line x1="23" y1="16" x2="30" y2="16" stroke="${oc}" stroke-width="1"/><line x1="16" y1="2" x2="16" y2="9" stroke="${oc}" stroke-width="1"/><line x1="16" y1="23" x2="16" y2="29" stroke="${oc}" stroke-width="1"/></svg>`,
+    hot:(s)=>({x:16*s,y:16*s}) },
+  { id:'sword', label:'SWORD',
+    svg:(mc,oc,s)=>`<svg width="${28*s}" height="${28*s}" viewBox="0 0 32 32"><line x1="4" y1="4" x2="24" y2="24" stroke="${mc}" stroke-width="3" stroke-linecap="round"/><polygon points="4,4 8,4 4,8" fill="${oc}"/><line x1="22" y1="15" x2="15" y2="22" stroke="${oc}" stroke-width="2"/><circle cx="26" cy="26" r="3" fill="${mc}" stroke="${oc}" stroke-width="1"/></svg>`,
+    hot:(s)=>({x:4,y:4}) },
+  { id:'hand', label:'HAND',
+    svg:(mc,oc,s)=>`<svg width="${28*s}" height="${28*s}" viewBox="0 0 32 32"><rect x="9" y="13" width="4" height="13" rx="2" fill="${mc}" stroke="${oc}" stroke-width="1"/><rect x="14" y="9" width="4" height="17" rx="2" fill="${mc}" stroke="${oc}" stroke-width="1"/><rect x="19" y="11" width="4" height="15" rx="2" fill="${mc}" stroke="${oc}" stroke-width="1"/><rect x="24" y="14" width="3" height="12" rx="1.5" fill="${mc}" stroke="${oc}" stroke-width="1"/><path d="M9 19 Q7 19 7 23 L7 25 Q7 29 11 29 L23 29 Q27 29 27 25 L27 20" fill="${mc}" stroke="${oc}" stroke-width="1"/></svg>`,
+    hot:(s)=>({x:14*s,y:9}) },
+];
+
+// ─── STATE ───────────────────────────────────────────────────────────
+const S = {
+  skinId:'arrow', photoDataUrl:null, photoName:null, isPhoto:false,
+  mainColor:'#e8001a', outlineColor:'#ffffff',
+  size:1.0, trail:1, opacity:1.0, imgSz:64,
+};
+
+// ─── TOAST ───────────────────────────────────────────────────────────
+function showToast(msg, isErr=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isErr?' err':'') + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ─── SVG → Canvas PNG base64 ─────────────────────────────────────────
+function svgToPngBase64(svgStr, w, h) {
+  return new Promise(res => {
+    const blob = new Blob([svgStr], {type:'image/svg+xml'});
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      res(c.toDataURL('image/png').replace(/^data:image\/png;base64,/,''));
+    };
+    img.src = url;
+  });
+}
+
+function dataUrlToPngBase64(dataUrl, w, h) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      res(c.toDataURL('image/png').replace(/^data:image\/png;base64,/,''));
+    };
+    img.src = dataUrl;
+  });
+}
+
+// ─── APPLY SYSTEM CURSOR ─────────────────────────────────────────────
+async function applySystemCursor() {
+  const btn = document.getElementById('applySystemBtn');
+  btn.textContent = '⏳ 적용 중...';
+  btn.disabled = true;
+
+  try {
+    let pngBase64, hotX, hotY;
+    const px = S.imgSz;
+
+    if (S.isPhoto && S.photoDataUrl) {
+      pngBase64 = await dataUrlToPngBase64(S.photoDataUrl, px, px);
+      hotX = Math.floor(px/2); hotY = Math.floor(px/2);
+    } else {
+      const skin = SKINS.find(s => s.id === S.skinId);
+      const sz = S.size;
+      const svgRaw = skin.svg(S.mainColor, S.outlineColor, sz);
+      const svgNs = svgRaw.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
+      const dim = Math.round(28 * sz);
+      pngBase64 = await svgToPngBase64(svgNs, dim, dim);
+      const hot = skin.hot(sz);
+      hotX = Math.round(hot.x); hotY = Math.round(hot.y);
+    }
+
+    const result = await window.electronAPI.applySystemCursor({ pngBase64, hotX, hotY });
+    if (result.ok) {
+      showToast('✓ Windows 커서 적용 완료!');
+    } else {
+      showToast(result.msg, true);
+    }
+  } catch(e) {
+    showToast('오류: ' + e.message, true);
+  } finally {
+    btn.textContent = '🖱 Windows 커서 적용';
+    btn.disabled = false;
+  }
+}
+
+// ─── RESTORE ─────────────────────────────────────────────────────────
+async function restoreCursors() {
+  const btn = document.getElementById('restoreBtn');
+  btn.textContent = '⏳ 복원 중...';
+  btn.disabled = true;
+  const result = await window.electronAPI.restoreCursors();
+  if (result.ok) showToast('✓ 기본 커서로 복원되었습니다');
+  else showToast(result.msg || '복원 실패', true);
+  btn.textContent = '↩ 기본 커서로 복원';
+  btn.disabled = false;
+}
+
+document.getElementById('applySystemBtn').addEventListener('click', applySystemCursor);
+document.getElementById('restoreBtn').addEventListener('click', restoreCursors);
+
+// ─── APP PREVIEW CURSOR (앱 내부) ────────────────────────────────────
+function applyAppCursor() {
+  const skin = SKINS.find(s => s.id === S.skinId);
+  const sz = S.size;
+  let cur;
+  if (S.isPhoto && S.photoDataUrl) {
+    const ps = S.imgSz;
+    const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${ps}" height="${ps}" viewBox="0 0 ${ps} ${ps}"><image href="${S.photoDataUrl}" width="${ps}" height="${ps}" preserveAspectRatio="xMidYMid meet"/></svg>`;
+    const b64 = btoa(unescape(encodeURIComponent(svgStr)));
+    cur = `url('data:image/svg+xml;base64,${b64}') ${ps/2} ${ps/2}, auto`;
+  } else {
+    const svgRaw = skin.svg(S.mainColor, S.outlineColor, sz);
+    const svgNs = svgRaw.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
+    const hot = skin.hot(sz);
+    const b64 = btoa(unescape(encodeURIComponent(svgNs)));
+    cur = `url('data:image/svg+xml;base64,${b64}') ${Math.round(hot.x)} ${Math.round(hot.y)}, auto`;
+  }
+  let st = document.getElementById('dyn-cur');
+  if (!st) { st = document.createElement('style'); st.id='dyn-cur'; document.head.appendChild(st); }
+  st.textContent = `*, *::before, *::after { cursor: ${cur} !important; }`;
+  ring.style.borderColor = S.isPhoto ? '#e8001a' : S.mainColor;
+  ring.style.boxShadow = `0 0 12px ${S.isPhoto?'#e8001a':S.mainColor}80`;
+  dot.style.background = S.isPhoto ? '#e8001a' : S.mainColor;
+  ring.style.opacity = S.opacity; dot.style.opacity = S.opacity;
+}
+
+// ─── SKIN GRID ───────────────────────────────────────────────────────
+const skinGrid = document.getElementById('skinGrid');
+SKINS.forEach(skin => {
+  const c = document.createElement('div');
+  c.className = 'skin-card'+(skin.id===S.skinId?' active':'');
+  c.dataset.id = skin.id;
+  c.innerHTML = `<div class="skin-preview">${skin.svg(S.mainColor,S.outlineColor,0.8)}</div><div class="skin-label">${skin.label}</div>`;
+  c.addEventListener('click', () => {
+    S.skinId=skin.id; S.isPhoto=false;
+    document.querySelectorAll('.skin-card').forEach(x=>x.classList.remove('active'));
+    document.getElementById('photoCard').classList.remove('active');
+    c.classList.add('active');
+    document.getElementById('skin-disp').textContent=skin.label;
+    updatePreviews(); applyAppCursor();
+  });
+  skinGrid.appendChild(c);
+});
+
+function updatePreviews() {
+  document.querySelectorAll('.skin-card').forEach(card => {
+    const skin = SKINS.find(s=>s.id===card.dataset.id);
+    card.querySelector('.skin-preview').innerHTML = skin.svg(S.mainColor,S.outlineColor,0.8);
+  });
+}
+
+// ─── PHOTO ───────────────────────────────────────────────────────────
+document.getElementById('pickBtn').addEventListener('click', async () => {
+  const r = await window.electronAPI.pickImage();
+  if (!r) return;
+  S.photoDataUrl=r.dataUrl; S.photoName=r.name; S.isPhoto=true;
+  document.getElementById('photoThumb').innerHTML=`<img src="${r.dataUrl}">`;
+  document.getElementById('photoName').textContent=r.name;
+  document.querySelectorAll('.skin-card').forEach(x=>x.classList.remove('active'));
+  document.getElementById('photoCard').classList.add('active');
+  document.getElementById('skin-disp').textContent='PHOTO';
+  applyAppCursor();
+});
+document.getElementById('photoCard').addEventListener('click', e => {
+  if(e.target.closest('#pickBtn')) return;
+  if(S.photoDataUrl) { S.isPhoto=true; document.querySelectorAll('.skin-card').forEach(x=>x.classList.remove('active')); document.getElementById('photoCard').classList.add('active'); applyAppCursor(); }
+});
+
+// ─── COLORS ──────────────────────────────────────────────────────────
+const mainCP=document.getElementById('mainColor'), mainH=document.getElementById('mainHex');
+const outCP=document.getElementById('outlineColor'), outH=document.getElementById('outlineHex');
+mainCP.addEventListener('input',e=>{S.mainColor=e.target.value;mainH.value=e.target.value;updatePreviews();applyAppCursor();});
+outCP.addEventListener('input',e=>{S.outlineColor=e.target.value;outH.value=e.target.value;updatePreviews();applyAppCursor();});
+mainH.addEventListener('input',e=>{if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)){S.mainColor=e.target.value;mainCP.value=e.target.value;updatePreviews();applyAppCursor();}});
+outH.addEventListener('input',e=>{if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)){S.outlineColor=e.target.value;outCP.value=e.target.value;updatePreviews();applyAppCursor();}});
+
+// ─── SLIDERS ─────────────────────────────────────────────────────────
+const TL=['없음','보통','강함','폭발'];
+function initSlider(id,cb){
+  const el=document.getElementById(id);
+  const upd=()=>{el.style.setProperty('--pct',((el.value-el.min)/(el.max-el.min)*100)+'%');cb(el.value);};
+  el.addEventListener('input',upd); upd();
+}
+initSlider('sizeSlider',v=>{S.size=v/100;document.getElementById('sizeVal').textContent=v+'%';updatePreviews();applyAppCursor();});
+initSlider('trailSlider',v=>{S.trail=parseInt(v);document.getElementById('trailVal').textContent=TL[v];});
+initSlider('opacitySlider',v=>{S.opacity=v/100;document.getElementById('opacityVal').textContent=v+'%';applyAppCursor();});
+initSlider('imgSzSlider',v=>{S.imgSz=parseInt(v);document.getElementById('imgSzVal').textContent=v+'px';if(S.isPhoto)applyAppCursor();});
+
+// ─── TITLEBAR ────────────────────────────────────────────────────────
+document.getElementById('btnMin').addEventListener('click',()=>window.electronAPI.minimize());
+document.getElementById('btnMax').addEventListener('click',()=>window.electronAPI.maximize());
+document.getElementById('btnClose').addEventListener('click',()=>window.electronAPI.close());
+
+// ─── AD (AdSense webview) ────────────────────────────────────────────
+window.electronAPI.onAdConfig((cfg) => {
+  const bannerUrl = cfg.bannerAdUrl;
+  if (bannerUrl && bannerUrl !== 'https://YOUR-SITE.com/ad-banner') {
+    document.getElementById('bannerAdView').src = bannerUrl;
+    document.getElementById('bannerFallback').style.display = 'none';
+  }
+});
+document.getElementById('bannerAdView').addEventListener('did-finish-load', () => {
+  const wv = document.getElementById('bannerAdView');
+  if (wv.src && wv.src !== 'about:blank') {
+    document.getElementById('bannerFallback').style.display = 'none';
+  }
+});
+
+// ─── CURSOR TRACKING ─────────────────────────────────────────────────
+const ring=document.getElementById('cur-ring'),dot=document.getElementById('cur-dot');
+const canvas=document.getElementById('trail-canvas'),ctx=canvas.getContext('2d');
+let mx=0,my=0,trailPts=[];
+function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+resize();window.addEventListener('resize',resize);
+
+document.addEventListener('mousemove',e=>{
+  mx=e.clientX;my=e.clientY;
+  dot.style.left=mx+'px';dot.style.top=my+'px';
+  ring.style.left=mx+'px';ring.style.top=my+'px';
+  document.getElementById('pos-disp').textContent=`${mx}, ${my}`;
+  if(S.trail>0){trailPts.push({x:mx,y:my,t:Date.now()});if(trailPts.length>40*S.trail)trailPts.shift();}
+});
+document.addEventListener('mouseover',e=>{
+  document.body.classList.toggle('hovering',!!e.target.closest('button,input,select,.skin-card,.photo-card,.pick-btn'));
+});
+document.addEventListener('mousedown',()=>document.body.classList.add('clicking'));
+document.addEventListener('mouseup',()=>document.body.classList.remove('clicking'));
+
+function animLoop(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(S.trail>0&&trailPts.length>1){
+    const now=Date.now(),life=350+S.trail*180;
+    trailPts=trailPts.filter(p=>now-p.t<life);
+    const col=S.isPhoto?'#e8001a':S.mainColor;
+    for(let i=1;i<trailPts.length;i++){
+      const p=trailPts[i],pp=trailPts[i-1];
+      const age=(now-p.t)/life,alpha=(1-age)*.55*S.opacity,w=(1-age)*(1.5+S.trail*.8);
+      ctx.beginPath();ctx.moveTo(pp.x,pp.y);ctx.lineTo(p.x,p.y);
+      ctx.strokeStyle=col+Math.round(alpha*255).toString(16).padStart(2,'0');
+      ctx.lineWidth=w;ctx.lineCap='round';ctx.stroke();
+    }
+  }
+  requestAnimationFrame(animLoop);
+}
+animLoop();
+applyAppCursor();
+</script>
+</body>
+</html>
