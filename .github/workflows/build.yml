@@ -1,0 +1,42 @@
+name: Build CursorForge EXE
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: Node.js 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 패키지 설치
+        run: npm install
+
+      - name: EXE 빌드
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 빌드 결과물 업로드 (인스톨러)
+        uses: actions/upload-artifact@v4
+        with:
+          name: CursorForge-Setup
+          path: dist/*Setup*.exe
+          retention-days: 30
+
+      - name: 빌드 결과물 업로드 (포터블)
+        uses: actions/upload-artifact@v4
+        with:
+          name: CursorForge-Portable
+          path: dist/*portable*.exe
+          retention-days: 30
