@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    width:520px; height:340px;
+    background:#050505; overflow:hidden;
+    font-family:'Segoe UI',sans-serif;
+    border:1px solid #2a0008;
+    display:flex; flex-direction:column;
+  }
+
+  /* 상단 로고 */
+  .header {
+    padding:18px 24px 14px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid #1a0005;
+    flex-shrink:0;
+  }
+  .logo { font-size:20px; font-weight:900; letter-spacing:6px; color:#e8e0e0; }
+  .logo span { color:#e8001a; }
+  .skip-btn {
+    font-size:10px; color:#3a1515; letter-spacing:2px;
+    background:none; border:1px solid #1a0005; padding:4px 10px; cursor:pointer;
+    transition:all .2s; font-family:'Courier New',monospace;
+  }
+  .skip-btn:hover { color:#e8001a; border-color:#e8001a; }
+
+  /* 광고 webview 영역 */
+  .ad-area {
+    flex:1; position:relative; background:#0a0a0a;
+    display:flex; flex-direction:column;
+  }
+  .ad-tag {
+    position:absolute; top:0; left:0; z-index:10;
+    background:#1a0005; color:#3a1515;
+    font-size:9px; letter-spacing:2px; padding:3px 10px;
+    font-family:'Courier New',monospace;
+  }
+  /* 실제 AdSense 페이지를 webview로 로드 */
+  webview {
+    width:100%; height:100%;
+    border:none;
+  }
+  /* webview 로드 전 fallback */
+  .ad-fallback {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    color:#3a1515; font-family:'Courier New',monospace; font-size:12px; letter-spacing:2px;
+  }
+  .ad-fallback .big { font-size:16px; color:#6b2020; }
+
+  /* 하단 진행바 */
+  .footer {
+    padding:10px 24px 12px; flex-shrink:0;
+    border-top:1px solid #1a0005;
+  }
+  .prog-head { display:flex; justify-content:space-between; margin-bottom:6px; }
+  .prog-head span { font-size:10px; color:#3a1515; letter-spacing:2px; font-family:'Courier New',monospace; }
+  #pct { color:#e8001a !important; }
+  .prog-bar { height:2px; background:#1a0005; }
+  .prog-fill { height:100%; background:#e8001a; width:0; transition:width .1s linear; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">CURSOR<span>FORGE</span></div>
+  <button class="skip-btn" id="skipBtn">SKIP ▶</button>
+</div>
+
+<div class="ad-area">
+  <div class="ad-tag">AD · GOOGLE ADSENSE</div>
+
+  <!-- ★ AdSense 광고가 있는 내 사이트 페이지를 여기서 로드합니다 -->
+  <!-- main.js의 AD_CONFIG.splashAdUrl 값이 여기 src로 들어옵니다 -->
+  <webview id="adView" src="about:blank" allowpopups></webview>
+
+  <!-- webview 로드 실패시 표시 -->
+  <div class="ad-fallback" id="fallback">
+    <div class="big">ADVERTISEMENT</div>
+    <div>Set your ad URL to display ads here</div>
+    <div style="font-size:10px;color:#2a1010;">Edit AD_CONFIG.splashAdUrl in main.js</div>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="prog-head">
+    <span>Loading app...</span>
+    <span id="pct">0%</span>
+  </div>
+  <div class="prog-bar"><div class="prog-fill" id="fill"></div></div>
+</div>
+
+<script>
+  let duration = 4000;
+  let startTime = Date.now();
+
+  // main.js에서 AD_CONFIG 수신
+  window.electronAPI.onAdConfig((cfg) => {
+    duration = cfg.splashDuration || 4000;
+    const url = cfg.splashAdUrl;
+    if (url && url !== 'https://YOUR-SITE.com/ad-splash') {
+      document.getElementById('adView').src = url;
+      document.getElementById('fallback').style.display = 'none';
+    }
+  });
+
+  // webview 로드 성공 시 fallback 숨기기
+  document.getElementById('adView').addEventListener('did-finish-load', () => {
+    const wv = document.getElementById('adView');
+    if (wv.src && wv.src !== 'about:blank') {
+      document.getElementById('fallback').style.display = 'none';
+    }
+  });
+
+  // 진행바
+  function tick() {
+    const elapsed = Date.now() - startTime;
+    const pct = Math.min(100, Math.floor(elapsed / duration * 100));
+    document.getElementById('pct').textContent = pct + '%';
+    document.getElementById('fill').style.width = pct + '%';
+    if (pct < 100) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // SKIP 버튼
+  document.getElementById('skipBtn').addEventListener('click', () => {
+    window.electronAPI.splashSkip();
+  });
+</script>
+</body>
+</html>
